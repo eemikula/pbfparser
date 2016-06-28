@@ -30,6 +30,7 @@ SOFTWARE.
 #include <netinet/in.h>
 #include <zlib.h>
 #include <stdint.h>
+#include <math.h>
 
 std::fstream &readDataStr(std::fstream &in, std::string &str, size_t size){
 	char *data = new char[size];
@@ -136,6 +137,12 @@ std::fstream &readHeaderBlock(std::fstream &in, OSMPBF::HeaderBlock &headerBlock
 
 }
 
+// lat/lon coordinates are stored in PBF files as integers, and getting lat/lon values
+// requires conversion using the specified granularity of the relevant block
+double getDegrees(int64_t n, int32_t granularity){
+	return n*granularity/pow(10,9);
+}
+
 int main(int argc, char *argv[]){
 
 	GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -199,7 +206,7 @@ int main(int argc, char *argv[]){
 							name = &block.stringtable().s(v);
 					}
 					if (pub && name)
-						std::cout << node.id() << " " << *name << "\n";
+						std::cout << node.id() << " " << *name << getDegrees(node.lat(), block.granularity()) << ", " << getDegrees(node.lon(), block.granularity()) << "\n";
 				}
 				if (block.primitivegroup(g).has_dense()){
 					const OSMPBF::DenseNodes &nodes = block.primitivegroup(g).dense();
@@ -209,11 +216,15 @@ int main(int argc, char *argv[]){
 					int i = 0;
 					int node = 0;
 					uint64_t idBase = 0;
+					int64_t latBase = block.lat_offset();
+					int64_t lonBase = block.lon_offset();
 					while (i < nodes.keys_vals_size()){
 
 						// new node
 						if (nodes.keys_vals(i) == 0){
 							idBase += nodes.id(node);
+							latBase += nodes.lat(node);
+							lonBase += nodes.lon(node);
 							i++;
 							node++;
 							pub = false;
@@ -231,7 +242,7 @@ int main(int argc, char *argv[]){
 							}
 
 							if (pub && name){
-								std::cout << (idBase+nodes.id(node)) << " " << *name << "\n";
+								std::cout << (idBase+nodes.id(node)) << " " << *name << ": " << getDegrees(latBase+nodes.lat(node), block.granularity()) << ", " << getDegrees(lonBase+nodes.lon(node), block.granularity()) << "\n";
 								while (nodes.keys_vals(i) != 0) i++;
 								continue;
 							}
